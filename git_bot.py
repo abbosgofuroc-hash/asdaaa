@@ -54,6 +54,7 @@ def download_from_youtube(url: str, output_dir: str) -> str | None:
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+        "cookiesfrombrowser": ("edge", None, None, None),
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.extract_info(url, download=True)
