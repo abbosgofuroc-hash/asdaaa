@@ -30,9 +30,10 @@ def search_youtube(query: str, limit: int = 5) -> list[dict]:
         "quiet": True,
         "no_warnings": True,
         "extract_flat": True,
+        "extractor_args": {"youtube": {"player_client": ["ios"]}},
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        results = ydl.extract_info(f"scsearch{limit}:{query}", download=False)
+        results = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
         tracks = []
         if results and "entries" in results:
             for entry in results["entries"]:
@@ -48,18 +49,29 @@ def search_youtube(query: str, limit: int = 5) -> list[dict]:
 
 
 def download_from_youtube(url: str, output_dir: str) -> str | None:
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "outtmpl": os.path.join(output_dir, "audio.%(ext)s"),
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.extract_info(url, download=True)
-    files = os.listdir(output_dir)
-    if files:
-        return os.path.join(output_dir, files[0])
+    clients = ["ios", "tv_embedded", "mweb"]
+    for client in clients:
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": os.path.join(output_dir, "audio.%(ext)s"),
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "extractor_args": {"youtube": {"player_client": [client]}},
+        }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.extract_info(url, download=True)
+            files = [f for f in os.listdir(output_dir) if not f.endswith(".part")]
+            if files:
+                return os.path.join(output_dir, files[0])
+        except Exception as e:
+            logger.warning(f"Yuklash ({client}) xatosi: {e}")
+            for f in os.listdir(output_dir):
+                try:
+                    os.remove(os.path.join(output_dir, f))
+                except Exception:
+                    pass
     return None
 
 
