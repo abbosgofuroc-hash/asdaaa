@@ -3,8 +3,6 @@ import logging
 import asyncio
 import tempfile
 from dotenv import load_dotenv
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
 import yt_dlp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -25,34 +23,31 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
-SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-
-sp = spotipy.Spotify(
-    auth_manager=SpotifyClientCredentials(
-        client_id=SPOTIFY_CLIENT_ID,
-        client_secret=SPOTIFY_CLIENT_SECRET,
-    )
-)
 
 
-def search_spotify(query: str, limit: int = 5) -> list[dict]:
-    results = sp.search(q=query, type="track", limit=limit)
-    tracks = []
-    for item in results["tracks"]["items"]:
-        artists = ", ".join(a["name"] for a in item["artists"])
-        tracks.append({
-            "title": item["name"],
-            "artist": artists,
-            "album": item["album"]["name"],
-            "duration_ms": item["duration_ms"],
-            "spotify_url": item["external_urls"]["spotify"],
-            "search_query": f"{item['name']} {artists} official audio",
-        })
-    return tracks
+def search_youtube(query: str, limit: int = 5) -> list[dict]:
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": True,
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        results = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+        tracks = []
+        if results and "entries" in results:
+            for entry in results["entries"]:
+                if entry:
+                    duration_ms = int((entry.get("duration") or 0) * 1000)
+                    tracks.append({
+                        "title": entry.get("title", "Unknown"),
+                        "artist": entry.get("uploader", "Unknown"),
+                        "duration_ms": duration_ms,
+                        "webpage_url": entry.get("webpage_url") or entry.get("url", ""),
+                    })
+        return tracks
 
 
-def download_from_youtube(search_query: str, output_dir: str) -> str | None:
+def download_from_youtube(url: str, output_dir: str) -> str | None:
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": os.path.join(output_dir, "%(title)s.%(ext)s"),
@@ -64,14 +59,11 @@ def download_from_youtube(search_query: str, output_dir: str) -> str | None:
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        "default_search": "ytsearch1",
     }
-
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch1:{search_query}", download=True)
-        if info and "entries" in info and info["entries"]:
-            entry = info["entries"][0]
-            filename = ydl.prepare_filename(entry)
+        info = ydl.extract_info(url, download=True)
+        if info:
+            filename = ydl.prepare_filename(info)
             mp3_path = os.path.splitext(filename)[0] + ".mp3"
             return mp3_path
     return None
@@ -90,10 +82,9 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    logger.info("start komandasi keldi")
     await update.message.reply_text(
         "🎵 *Musiqa Bot*\n\n"
-        "Qo'shiq nomi yoki ijrochi ismini yuboring, men topib beraman!\n\n"
+        "Qo'shiq nomi yoki ijrochi ismini yuboring!\n\n"
         "Misol: `Dua Lipa Levitating` yoki `Ulug'bek Rahmatullayev`",
         parse_mode="Markdown",
     )
@@ -102,7 +93,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "📖 *Yordam*\n\n"
-        "• Qo'shiq nomini yozing — men Spotify'dan topaman\n"
+        "• Qo'shiq nomini yozing — YouTube'dan topaman\n"
         "• Kerakli qo'shiqni tanlang — yuklab beraman\n"
         "• /start — botni qayta ishga tushirish\n\n"
         "🔍 Misol: `Billie Eilish Bad Guy`",
@@ -112,17 +103,17 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.message.text.strip()
-    logger.info(f"Xabar keldi: {query}")
+    logger.info(f"Qidiruv: {query}")
     if not query:
         return
 
     searching_msg = await update.message.reply_text("🔍 Qidirilmoqda...")
 
     try:
-        tracks = search_spotify(query)
+        tracks = search_youtube(query)
     except Exception as e:
-        logger.error(f"Spotify search error: {e}")
-        await searching_msg.edit_text("❌ Qidiruvda xato yuz berdi. Qaytadan urinib ko'ring.")
+        logger.error(f"Qidiruv xatosi: {e}")
+        await searching_msg.edit_text("❌ Qidiruvda xato. Qaytadan urinib ko'ring.")
         return
 
     if not tracks:
@@ -134,7 +125,7 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     for i, track in enumerate(tracks):
         duration = format_duration(track["duration_ms"])
-        label = f"🎵 {track['artist']} — {track['title']} ({duration})"
+        label = f"🎵 {track['title']} ({duration})"
         keyboard.append([InlineKeyboardButton(label, callback_data=f"track_{i}")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -161,7 +152,6 @@ async def download_track(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"⏳ Yuklanmoqda...\n\n"
         f"🎵 *{track['title']}*\n"
         f"👤 {track['artist']}\n"
-        f"💿 {track['album']}\n"
         f"⏱ {format_duration(track['duration_ms'])}"
     )
     await query.edit_message_text(info_text, parse_mode="Markdown")
@@ -170,18 +160,14 @@ async def download_track(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         try:
             loop = asyncio.get_event_loop()
             mp3_path = await loop.run_in_executor(
-                None, download_from_youtube, track["search_query"], tmpdir
+                None, download_from_youtube, track["webpage_url"], tmpdir
             )
 
             if not mp3_path or not os.path.exists(mp3_path):
                 await query.message.reply_text("❌ Musiqa yuklab bo'lmadi.")
                 return
 
-            caption = (
-                f"🎵 *{track['title']}*\n"
-                f"👤 {track['artist']}\n"
-                f"💿 {track['album']}"
-            )
+            caption = f"🎵 *{track['title']}*\n👤 {track['artist']}"
 
             with open(mp3_path, "rb") as audio_file:
                 await query.message.reply_audio(
@@ -193,17 +179,13 @@ async def download_track(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 )
 
         except Exception as e:
-            logger.error(f"Download error: {e}")
-            await query.message.reply_text(
-                "❌ Yuklab bo'lmadi. Qaytadan urinib ko'ring."
-            )
+            logger.error(f"Yuklash xatosi: {e}")
+            await query.message.reply_text("❌ Yuklab bo'lmadi. Qaytadan urinib ko'ring.")
 
 
 def main() -> None:
     if not TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN topilmadi! .env faylni tekshiring.")
-    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
-        raise ValueError("SPOTIFY kalitlari topilmadi! .env faylni tekshiring.")
 
     app = Application.builder().token(TOKEN).build()
 
