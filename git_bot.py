@@ -49,7 +49,7 @@ def search_youtube(query: str, limit: int = 5) -> list[dict]:
 
 def download_from_youtube(url: str, output_dir: str) -> str | None:
     ydl_opts = {
-        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+        "format": "18/bestaudio[ext=m4a]/bestaudio/best",
         "outtmpl": os.path.join(output_dir, "audio.%(ext)s"),
         "noplaylist": True,
         "quiet": True,
@@ -166,10 +166,8 @@ async def download_track(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             filename = os.path.basename(mp3_path)
 
             with open(mp3_path, "rb") as audio_file:
-                await query.message.reply_audio(
-                    audio=audio_file,
-                    title=track["title"],
-                    performer=track["artist"],
+                await query.message.reply_document(
+                    document=audio_file,
                     caption=caption,
                     parse_mode="Markdown",
                     filename=filename,
