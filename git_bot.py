@@ -110,7 +110,8 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     searching_msg = await update.message.reply_text("🔍 Qidirilmoqda...")
 
     try:
-        tracks = search_youtube(query)
+        loop = asyncio.get_event_loop()
+        tracks = await loop.run_in_executor(None, search_youtube, query)
     except Exception as e:
         logger.error(f"Qidiruv xatosi: {e}")
         await searching_msg.edit_text("❌ Qidiruvda xato. Qaytadan urinib ko'ring.")
