@@ -83,7 +83,14 @@ def format_duration(ms: int) -> str:
     return f"{minutes}:{secs:02d}"
 
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error("Xato yuz berdi:", exc_info=context.error)
+    if isinstance(update, Update) and update.message:
+        await update.message.reply_text(f"⚠️ Ichki xato: {context.error}")
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("start komandasi keldi")
     await update.message.reply_text(
         "🎵 *Musiqa Bot*\n\n"
         "Qo'shiq nomi yoki ijrochi ismini yuboring, men topib beraman!\n\n"
@@ -105,6 +112,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.message.text.strip()
+    logger.info(f"Xabar keldi: {query}")
     if not query:
         return
 
@@ -203,6 +211,7 @@ def main() -> None:
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CallbackQueryHandler(download_track, pattern=r"^track_\d+$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_music))
+    app.add_error_handler(error_handler)
 
     logger.info("Bot ishga tushdi...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
