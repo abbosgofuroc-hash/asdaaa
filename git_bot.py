@@ -32,7 +32,7 @@ def search_youtube(query: str, limit: int = 5) -> list[dict]:
         "extract_flat": True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        results = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+        results = ydl.extract_info(f"scsearch{limit}:{query}", download=False)
         tracks = []
         if results and "entries" in results:
             for entry in results["entries"]:
@@ -49,12 +49,11 @@ def search_youtube(query: str, limit: int = 5) -> list[dict]:
 
 def download_from_youtube(url: str, output_dir: str) -> str | None:
     ydl_opts = {
-        "format": "18/bestaudio[ext=m4a]/bestaudio/best",
+        "format": "bestaudio/best",
         "outtmpl": os.path.join(output_dir, "audio.%(ext)s"),
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        "extractor_args": {"youtube": {"player_client": ["android"]}},
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.extract_info(url, download=True)
