@@ -50,15 +50,16 @@ def search_youtube(query: str, limit: int = 5) -> list[dict]:
 def download_from_youtube(url: str, output_dir: str) -> str | None:
     ydl_opts = {
         "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
-        "outtmpl": os.path.join(output_dir, "%(title)s.%(ext)s"),
+        "outtmpl": os.path.join(output_dir, "audio.%(ext)s"),
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        if info:
-            return ydl.prepare_filename(info)
+        ydl.extract_info(url, download=True)
+    files = os.listdir(output_dir)
+    if files:
+        return os.path.join(output_dir, files[0])
     return None
 
 
