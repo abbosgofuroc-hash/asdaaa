@@ -49,13 +49,8 @@ def search_youtube(query: str, limit: int = 5) -> list[dict]:
 
 def download_from_youtube(url: str, output_dir: str) -> str | None:
     ydl_opts = {
-        "format": "bestaudio/best",
+        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
         "outtmpl": os.path.join(output_dir, "%(title)s.%(ext)s"),
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "192",
-        }],
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
@@ -63,9 +58,7 @@ def download_from_youtube(url: str, output_dir: str) -> str | None:
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         if info:
-            filename = ydl.prepare_filename(info)
-            mp3_path = os.path.splitext(filename)[0] + ".mp3"
-            return mp3_path
+            return ydl.prepare_filename(info)
     return None
 
 
@@ -169,6 +162,7 @@ async def download_track(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 return
 
             caption = f"🎵 *{track['title']}*\n👤 {track['artist']}"
+            filename = os.path.basename(mp3_path)
 
             with open(mp3_path, "rb") as audio_file:
                 await query.message.reply_audio(
@@ -177,6 +171,7 @@ async def download_track(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     performer=track["artist"],
                     caption=caption,
                     parse_mode="Markdown",
+                    filename=filename,
                 )
 
         except Exception as e:
