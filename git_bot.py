@@ -48,21 +48,49 @@ def search_youtube(query: str, limit: int = 5) -> list[dict]:
         return tracks
 
 
+def download_via_cobalt(url: str, output_dir: str) -> str | None:
+    try:
+        import httpx
+        with httpx.Client(timeout=60, follow_redirects=True) as client:
+            resp = client.post(
+                "https://api.cobalt.tools/",
+                json={"url": url, "downloadMode": "audio", "audioFormat": "mp3"},
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if data.get("status") not in ("stream", "redirect", "tunnel"):
+                return None
+            dl_url = data.get("url")
+            if not dl_url:
+                return None
+            filepath = os.path.join(output_dir, "audio.mp3")
+            with client.stream("GET", dl_url) as audio_resp:
+                with open(filepath, "wb") as f:
+                    for chunk in audio_resp.iter_bytes(chunk_size=8192):
+                        f.write(chunk)
+            if os.path.exists(filepath) and os.path.getsize(filepath) > 1000:
+                return filepath
+    except Exception as e:
+        logger.warning(f"Cobalt xatosi: {e}")
+    return None
+
+
 def download_from_youtube(url: str, output_dir: str) -> str | None:
-    base = {
-        "format": "bestaudio/best",
-        "outtmpl": os.path.join(output_dir, "audio.%(ext)s"),
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-    }
-    attempts = [
-        {**base, "cookiesfrombrowser": ("edge",)},
-        {**base, "cookiesfrombrowser": ("chrome",)},
-        {**base, "extractor_args": {"youtube": {"player_client": ["ios"], "player_skip": ["webpage"]}}},
-        {**base, "extractor_args": {"youtube": {"player_client": ["ios"]}}},
-    ]
-    for ydl_opts in attempts:
+    result = download_via_cobalt(url, output_dir)
+    if result:
+        return result
+
+    for client in ["ios", "tv_embedded"]:
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": os.path.join(output_dir, "audio.%(ext)s"),
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "extractor_args": {"youtube": {"player_client": [client]}},
+        }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info(url, download=True)
@@ -70,7 +98,7 @@ def download_from_youtube(url: str, output_dir: str) -> str | None:
             if files:
                 return os.path.join(output_dir, files[0])
         except Exception as e:
-            logger.warning(f"Yuklash xatosi: {e}")
+            logger.warning(f"yt-dlp ({client}) xatosi: {e}")
             for f in os.listdir(output_dir):
                 try:
                     os.remove(os.path.join(output_dir, f))
